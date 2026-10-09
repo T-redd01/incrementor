@@ -2,11 +2,14 @@ package incrementor
 
 import (
 	"sync"
+	"bytes"
 )
 
 const (
 	SECTION_SIZE = 64
 	SECTION_KEY_SIZE = 56
+	SECTION_MNT_SIZE = 8
+	SECTION_VAL_SIZE = 4
 )
 
 type Incrementor struct {
@@ -15,7 +18,7 @@ type Incrementor struct {
 	keyLocks []sync.Mutex
 }
 
-func NewIncrementor(key int) *Incrementor {
+func NewIncrementor(keys int) *Incrementor {
 	return &Incrementor{
 		buffer: make([]byte, keys * SECTION_SIZE),
 		bufferLock: sync.RWMutex{},
@@ -31,11 +34,11 @@ func (inc Incrementor) KeyIdxFromSectionIdx(sectionIdx int) int {
 	return sectionIdx / SECTION_SIZE
 }
 
-func (inc Incrementor) NumKeys() {
+func (inc Incrementor) NumKeys() int {
 	return len(inc.keyLocks)
 }
 
-func (inc Incrementor) bin_search(key []byte, l, h int) (int, int) {
+func (inc Incrementor) binSearch(key []byte, l, h int) (int, int) {
 	if (h == l) || ((h - l) == 1) {
 		lSecIdx := inc.SectionIdxFromKeyIdx(l)
 		return lSecIdx, bytes.Compare(inc.buffer[lSecIdx:(lSecIdx + SECTION_SIZE)], key)
@@ -44,13 +47,12 @@ func (inc Incrementor) bin_search(key []byte, l, h int) (int, int) {
 	mSecIdx := inc.SectionIdxFromKeyIdx(l + ((h - l) / 2))
 	cmp := bytes.Compare(inc.buffer[mSecIdx:(mSecIdx + SECTION_SIZE)], key)
 	if cmp > 0 {
-		return inc.bin_search(key, l, inc.KeyIdxFromSectionIdx(mSecIdx))
+		return inc.binSearch(key, l, inc.KeyIdxFromSectionIdx(mSecIdx))
 	}
 
 	if cmp < 0 {
-		return inc.bin_search(key, inc.KeyIdxFromSectionIdx(mSecIdx), h)
+		return inc.binSearch(key, inc.KeyIdxFromSectionIdx(mSecIdx), h)
 	}
 
 	return mSecIdx, cmp
 }
-
