@@ -14,10 +14,43 @@ func TestIncrementorPrivBinSearch(t *testing.T) {
 		expectCmpVal int
 	}{
 		{
-			"NotFound",
+			"NotFoundHigh",
 			[]byte{121, 101, 115},
 			4,
 			-1,
+		},
+		{
+			"NotFoundLow",
+			[]byte{65, 114, 101},
+			0,
+			1,
+		},
+		{
+			"FoundFirst",
+			[]byte{
+				97, 114, 101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			},
+			0,
+			0,
+		},
+		{
+			"FoundLast",
+			[]byte{
+				119, 111, 114, 108, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			},
+			4,
+			0,
+		},
+		{
+			"FoundMid",
+			[]byte{
+				115, 116, 114, 105, 110, 103, 115, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			},
+			2,
+			0,
 		},
 	}
 
@@ -43,6 +76,7 @@ func TestIncrementorPrivBinSearch(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func (t *testing.T) {
+			t.Logf("input bytes len: %d", len(test.input))
 			stop, cmp := inc.binSearch(test.input, 0, 5) // only 5 keys in injected buffer
 
 			assert.Equal(t, test.expectStopIdx, stop)

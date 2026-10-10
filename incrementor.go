@@ -7,7 +7,7 @@ import (
 
 const (
 	SECTION_SIZE = 64
-	SECTION_KEY_SIZE = 56
+	SECTION_KEY_SIZE = 52
 	SECTION_MNT_SIZE = 8
 	SECTION_VAL_SIZE = 4
 )
@@ -41,18 +41,19 @@ func (inc Incrementor) NumKeys() int {
 func (inc Incrementor) binSearch(key []byte, l, h int) (int, int) {
 	if (h == l) || ((h - l) == 1) {
 		lSecIdx := inc.SectionIdxFromKeyIdx(l)
-		return lSecIdx, bytes.Compare(inc.buffer[lSecIdx:(lSecIdx + SECTION_SIZE)], key)
+		return l, bytes.Compare(inc.buffer[lSecIdx:(lSecIdx + SECTION_KEY_SIZE)], key)
 	}
 
-	mSecIdx := inc.SectionIdxFromKeyIdx(l + ((h - l) / 2))
-	cmp := bytes.Compare(inc.buffer[mSecIdx:(mSecIdx + SECTION_SIZE)], key)
+	mKeyIdx := l + ((h - l) / 2)
+	mSecIdx := inc.SectionIdxFromKeyIdx(mKeyIdx)
+	cmp := bytes.Compare(inc.buffer[mSecIdx:(mSecIdx + SECTION_KEY_SIZE)], key)
 	if cmp > 0 {
-		return inc.binSearch(key, l, inc.KeyIdxFromSectionIdx(mSecIdx))
+		return inc.binSearch(key, l, mKeyIdx)
 	}
 
 	if cmp < 0 {
-		return inc.binSearch(key, inc.KeyIdxFromSectionIdx(mSecIdx), h)
+		return inc.binSearch(key, mKeyIdx, h)
 	}
 
-	return mSecIdx, cmp
+	return mKeyIdx, cmp
 }
