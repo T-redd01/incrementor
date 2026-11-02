@@ -73,6 +73,7 @@ func TestIncrementorPrivBinSearch(t *testing.T) {
 	}
 	inc := NewIncrementor(5)
 	inc.buffer = buffer
+	inc.numKeys = 5
 
 	for _, test := range tests {
 		t.Run(test.name, func (t *testing.T) {
@@ -81,6 +82,66 @@ func TestIncrementorPrivBinSearch(t *testing.T) {
 
 			assert.Equal(t, test.expectStopIdx, stop)
 			assert.Equal(t, test.expectCmpVal, cmp)
+		})
+	}
+}
+
+func TestIncrementorPubHas(t *testing.T) {
+	tests := []struct{
+		name string
+		key []byte
+		expect bool
+	}{
+		{
+			"KeyTooLarge",
+			// these
+			[]byte{
+				116, 104, 101, 115, 101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			},
+			false,
+		},
+		{
+			"HasKey",
+			[]byte{
+				116, 104, 101, 115, 101,
+			},
+			true,
+		},
+		{
+			"NotHasKey",
+			[]byte{
+				112, 112, 112, 112,
+			},
+			false,
+		},
+	}
+
+	buffer := []byte{
+		// are
+		97, 114, 101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		// hello
+		104, 101, 108, 108, 111, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		// strings
+		115, 116, 114, 105, 110, 103, 115, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		// these
+		116, 104, 101, 115, 101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		// world
+		119, 111, 114, 108, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}
+	inc := NewIncrementor(5)
+	inc.buffer = buffer
+	inc.numKeys = 5
+
+	for _, test := range tests {
+		t.Run(test.name, func (t *testing.T) {
+			res := inc.Has(test.key)
+			assert.Equal(t, test.expect, res)
 		})
 	}
 }
