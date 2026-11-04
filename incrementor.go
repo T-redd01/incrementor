@@ -3,6 +3,8 @@ package incrementor
 import (
 	"sync"
 	"bytes"
+	"errors"
+	"encoding/binary"
 )
 
 const (
@@ -33,14 +35,9 @@ func (inc Incrementor) NumKeys() int {
 }
 
 func (inc *Incrementor) Has(key []byte) bool {
-	if len(key) > SECTION_KEY_SIZE {
+	padKey, err := inc.padKey(key)
+	if err != nil {
 		return false
-	}
-
-	// pad key for safe slicing
-	padKey := make([]byte, SECTION_KEY_SIZE)
-	for i := 0; i < len(key); i++ {
-		padKey[i] = key[i]
 	}
 
 	inc.bufferLock.RLock() // unlock for read lock is not deferred
@@ -53,12 +50,55 @@ func (inc *Incrementor) Has(key []byte) bool {
 	return true
 }
 
+func (inc *Incrementor) Get(key []byte) (uint32, error) {
+	padKey, err := inc.padKey(key)
+	if err != nil {
+		return 0, err
+	}
+
+	inc.bufferLock.RLock() // unlock for read lock is not deferred
+
+	keyIdx, cmp := inc.binSearch(padKey, 0, inc.NumKeys())
+	if cmp != 0 {
+		inc.bufferLock.RUnlock() // unlock before return
+		return 0, errors.New("Key not found")
+	}
+
+	inc.keyLocks[keyIdx].Lock() // lock section in buffer before using
+
+	sectionIdx := inc.sectionIdxFromKeyIdx(keyIdx)
+	// last 4 bytes / value part of section
+	sectionVal := inc.buffer[(sectionIdx + SECTION_KEY_SIZE + SECTION_MNT_SIZE):(sectionIdx + SECTION_SIZE)]
+	// IMPORTANT: check endianess before following through here
+	n := binary.BigEndian.Uint32(sectionVal)
+	n++
+	binary.BigEndian.PutUint32(sectionVal, n)
+
+	inc.keyLocks[keyIdx].Unlock() // unlock section in buffer after finish
+
+	inc.bufferLock.RUnlock()
+	return n, nil
+}
+
+func (inc Incrementor) padKey(key []byte) ([]byte, error) {
+	if len(key) > SECTION_KEY_SIZE {
+		return []byte{}, errors.New("Key size limit exceeded")
+	}
+
+	pk := make([]byte, SECTION_KEY_SIZE)
+	for i := 0; i < len(key); i++ {
+		pk[i] = key[i]
+	}
+
+	return pk, nil
+}
+
 func (inc Incrementor) sectionIdxFromKeyIdx(keyIdx int) int {
-	return keyIdx * SECTION_SIZE
+	return keyIdx * SECTION_SIZE // section in buffer
 }
 
 func (inc Incrementor) keyIdxFromSectionIdx(sectionIdx int) int {
-	return sectionIdx / SECTION_SIZE
+	return sectionIdx / SECTION_SIZE // byte in buffer
 }
 
 func (inc Incrementor) binSearch(key []byte, l, h int) (int, int) {

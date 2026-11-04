@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIncrementorPrivBinSearch(t *testing.T) {
@@ -78,7 +79,7 @@ func TestIncrementorPrivBinSearch(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func (t *testing.T) {
 			t.Logf("input bytes len: %d", len(test.input))
-			stop, cmp := inc.binSearch(test.input, 0, 5) // only 5 keys in injected buffer
+			stop, cmp := inc.binSearch(test.input, 0, inc.NumKeys()) // only 5 keys in injected buffer
 
 			assert.Equal(t, test.expectStopIdx, stop)
 			assert.Equal(t, test.expectCmpVal, cmp)
@@ -143,5 +144,105 @@ func TestIncrementorPubHas(t *testing.T) {
 			res := inc.Has(test.key)
 			assert.Equal(t, test.expect, res)
 		})
+	}
+}
+
+func TestIncrementorPubGet(t *testing.T) {
+	tests := []struct{
+		name string
+		key []byte
+		expectErr bool
+		expectVal uint32
+	}{
+		{
+			"KeySizeExceededError",
+			[]byte{
+				115, 116, 114, 105, 110, 103, 115, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			},
+			true,
+			0,
+		},
+		{
+			"KeyDoesNotExist",
+			[]byte{
+				1, 2, 3, 4, 5,
+			},
+			true,
+			0,
+		},
+		{
+			"ValueIncremented",
+			[]byte{
+				115, 116, 114, 105, 110, 103, 115,
+			},
+			false,
+			1,
+		},
+	}
+
+	buffer := []byte{
+		// are
+		97, 114, 101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		// hello
+		104, 101, 108, 108, 111, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		// strings
+		115, 116, 114, 105, 110, 103, 115, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		// these
+		116, 104, 101, 115, 101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		// world
+		119, 111, 114, 108, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}
+	inc := NewIncrementor(5)
+	inc.buffer = buffer
+	inc.numKeys = 5
+
+	for _, test := range tests {
+		t.Run(test.name, func (t *testing.T) {
+			n, err := inc.Get(test.key)
+			if test.expectErr == true {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			assert.Equal(t, test.expectVal, n)
+		})
+	}
+}
+
+func TestIncrementorPubGetIncrementsSaved(t *testing.T) {
+	buffer := []byte{
+		// are
+		97, 114, 101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		// hello
+		104, 101, 108, 108, 111, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		// strings
+		115, 116, 114, 105, 110, 103, 115, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		// these
+		116, 104, 101, 115, 101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		// world
+		119, 111, 114, 108, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}
+	inc := NewIncrementor(5)
+	inc.buffer = buffer
+	inc.numKeys = 5
+
+	key := []byte{97, 114, 101}
+
+	for i := 1; i < 15; i++ {
+		n, err := inc.Get(key)
+		require.NoError(t, err)
+		assert.Equal(t, uint32(i), n) // n should increment from 0 which will match i's value each time
 	}
 }
