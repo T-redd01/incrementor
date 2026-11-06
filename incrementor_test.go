@@ -74,12 +74,12 @@ func TestIncrementorPrivBinSearch(t *testing.T) {
 	}
 	inc := NewIncrementor(5)
 	inc.buffer = buffer
-	inc.numKeys = 5
+	inc.keyCount = 5
 
 	for _, test := range tests {
 		t.Run(test.name, func (t *testing.T) {
 			t.Logf("input bytes len: %d", len(test.input))
-			stop, cmp := inc.binSearch(test.input, 0, inc.NumKeys()) // only 5 keys in injected buffer
+			stop, cmp := inc.binSearch(test.input, 0, inc.KeyCount()) // only 5 keys in injected buffer
 
 			assert.Equal(t, test.expectStopIdx, stop)
 			assert.Equal(t, test.expectCmpVal, cmp)
@@ -137,7 +137,7 @@ func TestIncrementorPubHas(t *testing.T) {
 	}
 	inc := NewIncrementor(5)
 	inc.buffer = buffer
-	inc.numKeys = 5
+	inc.keyCount = 5
 
 	for _, test := range tests {
 		t.Run(test.name, func (t *testing.T) {
@@ -200,7 +200,7 @@ func TestIncrementorPubGet(t *testing.T) {
 	}
 	inc := NewIncrementor(5)
 	inc.buffer = buffer
-	inc.numKeys = 5
+	inc.keyCount = 5
 
 	for _, test := range tests {
 		t.Run(test.name, func (t *testing.T) {
@@ -236,7 +236,7 @@ func TestIncrementorPubGetIncrementsSaved(t *testing.T) {
 	}
 	inc := NewIncrementor(5)
 	inc.buffer = buffer
-	inc.numKeys = 5
+	inc.keyCount = 5
 
 	key := []byte{97, 114, 101}
 
