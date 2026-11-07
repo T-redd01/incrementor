@@ -1,6 +1,7 @@
 package incrementor
 
 import (
+	"fmt"
 	"sync"
 	"bytes"
 	"errors"
@@ -208,4 +209,18 @@ func (inc Incrementor) binSearch(key []byte, l, h int) (int, int) {
 	}
 
 	return mKeyIdx, cmp
+}
+
+func (inc Incrementor) printSections() {
+	for i := 0; i < inc.KeyCount(); i++ {
+		secIdx := inc.sectionIdxFromKeyIdx(i)
+		sectionKey := inc.buffer[secIdx:(secIdx + SECTION_KEY_SIZE)]
+		sectionMnt := inc.buffer[(secIdx + SECTION_KEY_SIZE):(secIdx + SECTION_KEY_SIZE + SECTION_MNT_SIZE)]
+		sectionVal := inc.buffer[(secIdx + SECTION_KEY_SIZE + SECTION_MNT_SIZE):(secIdx + SECTION_SIZE)]
+
+		// IMPORTANT: check endianess
+		mnt := time.UnixMilli(int64(binary.BigEndian.Uint64(sectionMnt)))
+		val := binary.BigEndian.Uint32(sectionVal)
+		fmt.Println(fmt.Sprintf("%v:%s:%d", sectionKey, mnt, val))
+	}
 }
