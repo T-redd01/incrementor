@@ -172,6 +172,40 @@ func (inc *Incrementor) Add(key []byte) error {
 	return nil
 }
 
+func (inc *Incrementor) Del(key []byte) error {
+	padKey, err := inc.padKey(key)
+	if err != nil {
+		return err
+	}
+
+	inc.bufferLock.Lock() // lock buffer for writing
+
+	keyIdx, cmp := inc.binSearch(padKey, 0, inc.KeyCount())
+	if cmp != 0 {
+		inc.bufferLock.Unlock()
+		return errors.New("Key not found")
+	}
+
+	for keyIdx < (inc.KeyCount() - 1) {
+		currSecIdx := inc.sectionIdxFromKeyIdx(keyIdx)
+		nextSecIdx := inc.sectionIdxFromKeyIdx(keyIdx + 1)
+		copy(inc.buffer[currSecIdx:(currSecIdx + SECTION_SIZE)], inc.buffer[nextSecIdx:(nextSecIdx + SECTION_SIZE)])
+
+		keyIdx++
+	}
+
+	// 0 last used key section
+	for i := keyIdx; i < (inc.sectionIdxFromKeyIdx(keyIdx) + SECTION_SIZE); i++ {
+		inc.buffer[i] = 0
+	}
+
+	inc.keyCount = inc.keyCount - 1
+
+	inc.bufferLock.Unlock() // allow reading and writing after mutation
+
+	return nil
+}
+
 func (inc Incrementor) padKey(key []byte) ([]byte, error) {
 	if len(key) > SECTION_KEY_SIZE {
 		return []byte{}, errors.New("Key size limit exceeded")
