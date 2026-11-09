@@ -548,7 +548,7 @@ func TestIncrementorPubAdd(t *testing.T) {
 	}
 }
 
-func TestIncrementorPudDel(t *testing.T) {
+func TestIncrementorPubDel(t *testing.T) {
 	tests := []struct{
 		name string
 		injectBuf []byte
@@ -717,7 +717,7 @@ func TestIncrementorPudDel(t *testing.T) {
 	}
 }
 
-func TestIncrementorPudResize(t *testing.T) {
+func TestIncrementorPubResize(t *testing.T) {
 	tests := []struct{
 		name string
 		injectBuf []byte

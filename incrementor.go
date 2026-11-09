@@ -123,7 +123,11 @@ func (inc *Incrementor) Get(key []byte) (uint32, error) {
  * Return: error if fail to add key nil otherwise
  */
 func (inc *Incrementor) Add(key []byte) error {
-	if (len(inc.buffer) / SECTION_SIZE) == inc.KeyCount() {
+	// lock buffer for writing, keycount is also mutated so check must be synchronized aswell
+	inc.bufferLock.Lock()
+	defer inc.bufferLock.Unlock()
+
+	if inc.KeyLimit() == inc.KeyCount() {
 		return errors.New("Buffer is full")
 	}
 
@@ -132,11 +136,8 @@ func (inc *Incrementor) Add(key []byte) error {
 		return err
 	}
 
-	inc.bufferLock.Lock() // lock buffer for writing
-
 	keyIdx, cmp := inc.binSearch(padKey, 0, inc.KeyCount())
 	if cmp == 0 {
-		inc.bufferLock.Unlock()
 		return errors.New("Key already exists in buffer")
 	}
 
@@ -171,8 +172,6 @@ func (inc *Incrementor) Add(key []byte) error {
 	}
 
 	inc.keyCount = inc.keyCount + 1
-
-	inc.bufferLock.Unlock() // allow reading and writing after mutation
 
 	return nil
 }
@@ -223,6 +222,7 @@ func (inc *Incrementor) Resize(keys int) error {
 
 	inc.bufferLock.Lock() // block all reading and writing
 
+	// allocate new buffer and copy old values
 	newBuf := make([]byte, keys * SECTION_SIZE)
 	copy(newBuf, inc.buffer[0:(inc.sectionIdxFromKeyIdx(inc.KeyCount() - 1) + SECTION_SIZE)]) // only copy portion of buffer in use
 	inc.buffer = newBuf
@@ -286,6 +286,6 @@ func (inc Incrementor) printSections() {
 		endian := binary.NativeEndian
 		mnt := time.UnixMilli(int64(endian.Uint64(sectionMnt)))
 		val := endian.Uint32(sectionVal)
-		fmt.Println(fmt.Sprintf("%v:%s:%d", sectionKey, mnt, val))
+		fmt.Println(fmt.Sprintf("%x:%s:%d", sectionKey, mnt, val))
 	}
 }
