@@ -199,7 +199,8 @@ func (inc *Incrementor) Del(key []byte) error {
 	}
 
 	// 0 last used key section
-	for i := keyIdx; i < (inc.sectionIdxFromKeyIdx(keyIdx) + SECTION_SIZE); i++ {
+	lstSecIdx := inc.sectionIdxFromKeyIdx(keyIdx)
+	for i := lstSecIdx; i < (lstSecIdx + SECTION_SIZE); i++ {
 		inc.buffer[i] = 0
 	}
 
