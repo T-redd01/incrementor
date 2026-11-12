@@ -7,6 +7,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestIncrementorPrivSectionIdxFromKeyIdx(t *testing.T) {
+}
+
+func TestIncrementorPrivKeyIdxFromSectionIdx(t *testing.T) {
+}
+
+func TestIncrementorPrivPadKey(t *testing.T) {
+}
+
+func TestIncrementorPubKeyCount(t *testing.T) {
+}
+
+func TestIncrementorPubKeyLimit(t *testing.T) {
+}
+
 func TestIncrementorPrivBinSearch(t *testing.T) {
 	tests := []struct{
 		name string
@@ -544,6 +559,7 @@ func TestIncrementorPubAdd(t *testing.T) {
 			idx, cmp := inc.binSearch(padKey, 0, inc.KeyCount())
 			assert.Equal(t, test.expectKeyPosInBuf, idx)
 			assert.Equal(t, test.expectCmpVal, cmp)
+			//inc.printSections()
 		})
 	}
 }

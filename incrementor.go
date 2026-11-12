@@ -88,31 +88,27 @@ func (inc *Incrementor) Get(key []byte) (uint32, error) {
 		return 0, err
 	}
 
-	inc.bufferLock.RLock() // unlock for read lock is not deferred
+	inc.bufferLock.RLock()
+	defer inc.bufferLock.RUnlock()
 
 	keyIdx, cmp := inc.binSearch(padKey, 0, inc.KeyCount())
 	if cmp != 0 {
-		inc.bufferLock.RUnlock() // unlock before return
 		return 0, errors.New("Key not found")
 	}
 
 	inc.keyLocks[keyIdx].Lock() // lock section in buffer before using
 
-	// capture section value part slice for key
-	// cast to 'uint32' and increment
-	// overwrite captured section slice 
-	// in buffer with new incremented value
 	sectionIdx := inc.sectionIdxFromKeyIdx(keyIdx)
 	sectionVal := inc.buffer[(sectionIdx + SECTION_KEY_SIZE + SECTION_MNT_SIZE):(sectionIdx + SECTION_SIZE)]
-	// IMPORTANT: check endianess before following through here
+
 	endian := binary.NativeEndian
+
 	n := endian.Uint32(sectionVal)
 	n++
 	endian.PutUint32(sectionVal, n)
 
 	inc.keyLocks[keyIdx].Unlock() // unlock section in buffer after finish
 
-	inc.bufferLock.RUnlock() // finish read operation on buffer
 	return n, nil
 }
 
@@ -148,71 +144,100 @@ func (inc *Incrementor) Add(key []byte) error {
 		keyIdx = keyIdx + 1
 	}
 
-	prev := make([]byte, SECTION_SIZE)
+	insertSecIdx := inc.sectionIdxFromKeyIdx(keyIdx)
+	lastSecIdx := inc.sectionIdxFromKeyIdx(inc.KeyCount() - 1)
 
-	// new key is written on first run to its correct position
-	// mutate 'prev' to contain the values of the new 
-	// section to be added
-	copy(prev[0:SECTION_KEY_SIZE], key)
-	endian := binary.NativeEndian
-	endian.PutUint64(
-		prev[SECTION_KEY_SIZE:(SECTION_KEY_SIZE + SECTION_MNT_SIZE)],
-		uint64(time.Now().UnixMilli()),
+	// copy from key insert idx in buffer until one section after last key in buffer
+	// makes space / moves everything one section down so new key can be inserted
+	copy(
+		inc.buffer[(insertSecIdx + SECTION_SIZE):(lastSecIdx + (SECTION_SIZE * 2))],
+		inc.buffer[insertSecIdx:(lastSecIdx + SECTION_SIZE)],
 	)
 
-	curr := make([]byte, SECTION_SIZE)
-	for i := keyIdx; i < (inc.KeyCount() + 1); i++ {
-		// save current section
-		currSecIdx := inc.sectionIdxFromKeyIdx(i)
-		copy(curr, inc.buffer[currSecIdx:(currSecIdx + SECTION_SIZE)])
-		// write previous into current
-		copy(inc.buffer[currSecIdx:(currSecIdx + SECTION_SIZE)], prev)
-		// write curr into prev
-		copy(prev, curr)
-	}
+	endian := binary.NativeEndian
+	copy(inc.buffer[insertSecIdx:(insertSecIdx + SECTION_KEY_SIZE)], padKey)
+	endian.PutUint64(
+		inc.buffer[(insertSecIdx + SECTION_KEY_SIZE):(insertSecIdx + SECTION_KEY_SIZE + SECTION_MNT_SIZE)],
+		uint64(time.Now().UnixMilli()),
+	)
 
 	inc.keyCount = inc.keyCount + 1
 
 	return nil
 }
 
+/*
+ * Del: Delete a key from the buffer
+ * @key: key to delete
+ *
+ * Return: error if key does not exist, nil otherwise
+ */
 func (inc *Incrementor) Del(key []byte) error {
+	// NOTE: padKey takes key and checks whether it is
+	//       larger than the allowed key size, if so
+	//       it will return an error, if not it will
+	//       create a new with total allowed key size
+	//       and copy the requested key into effectively
+	//       padding it to key size if it is shorter
+	//       and it always returns a new slice from make
+	//       but for some reason if we decide to lock
+	//       the buffer for writing after padding the key
+	//       we get a data race, even more sus the
+	//       keyCount field gets race aswell
+	//       WHY, HOW?
+	//       HOW, WHY?
+	//       it doesnt make sense
+	//       explore this further in the future
+	inc.bufferLock.Lock()
+	defer inc.bufferLock.Unlock()
+
 	padKey, err := inc.padKey(key)
 	if err != nil {
 		return err
 	}
 
-	inc.bufferLock.Lock() // lock buffer for writing
 
 	keyIdx, cmp := inc.binSearch(padKey, 0, inc.KeyCount())
 	if cmp != 0 {
-		inc.bufferLock.Unlock()
 		return errors.New("Key not found")
 	}
 
-	for keyIdx < (inc.KeyCount() - 1) {
-		currSecIdx := inc.sectionIdxFromKeyIdx(keyIdx)
-		nextSecIdx := inc.sectionIdxFromKeyIdx(keyIdx + 1)
-		copy(inc.buffer[currSecIdx:(currSecIdx + SECTION_SIZE)], inc.buffer[nextSecIdx:(nextSecIdx + SECTION_SIZE)])
+	// index of first byte of section to delete and section after section to delete
+	delSecIdx := inc.sectionIdxFromKeyIdx(keyIdx)
+	nextSecIdx := delSecIdx + SECTION_SIZE
 
-		keyIdx++
-	}
+	// index of last byte of last section and second last section
+	endLstSecIdx := inc.sectionIdxFromKeyIdx(inc.KeyCount() - 1) + SECTION_SIZE
+	endSecLstSecIdx := endLstSecIdx - SECTION_SIZE
+
+	// move everything from section after delete section up
+	// removing / overwriting delete section
+	copy(
+		inc.buffer[delSecIdx:endSecLstSecIdx],
+		inc.buffer[nextSecIdx:endLstSecIdx],
+	)
 
 	// 0 last used key section
-	lstSecIdx := inc.sectionIdxFromKeyIdx(keyIdx)
-	for i := lstSecIdx; i < (lstSecIdx + SECTION_SIZE); i++ {
+	for i := endSecLstSecIdx; i < endLstSecIdx; i++ {
 		inc.buffer[i] = 0
 	}
 
 	inc.keyCount = inc.keyCount - 1
 
-	inc.bufferLock.Unlock() // allow reading and writing after mutation
-
 	return nil
 }
 
+/*
+ * Resize: Expand or Shrink buffer
+ * @keys: number of keys for buffer to hold, not less than 1
+ *
+ * Return: error if more keys in buffer than requested keys
+ *         or requested less than 1 key
+ */
 func (inc *Incrementor) Resize(keys int) error {
-	//fmt.Println(fmt.Sprintf("key locks len: %v, cap: %v", len(inc.keyLocks), cap(inc.
+	inc.bufferLock.Lock() // block all reading and writing
+	defer inc.bufferLock.Unlock() // allow all reading and writing
+
 	if keys < inc.KeyCount() {
 		return errors.New("Requested key count lower than current key count")
 	}
@@ -220,8 +245,6 @@ func (inc *Incrementor) Resize(keys int) error {
 	if keys <= 0 {
 		return errors.New("Requested key count must ne atleast 1")
 	}
-
-	inc.bufferLock.Lock() // block all reading and writing
 
 	// allocate new buffer and copy old values
 	newBuf := make([]byte, keys * SECTION_SIZE)
@@ -232,11 +255,16 @@ func (inc *Incrementor) Resize(keys int) error {
 	newKeyLocks := make([]sync.Mutex, keys)
 	inc.keyLocks = newKeyLocks
 
-	inc.bufferLock.Unlock() // allow all reading and writing
-
 	return nil
 }
 
+/*
+ * padKey: pad a key to SECTION_KEY_SIZE
+ * @key: key to be padded
+ *
+ * Return: new byte slice of size SECTION_KEY_SIZE with key added
+ *         error if key is larger than SECTION_SIZE
+ */
 func (inc Incrementor) padKey(key []byte) ([]byte, error) {
 	if len(key) > SECTION_KEY_SIZE {
 		return []byte{}, errors.New("Key size limit exceeded")
@@ -248,14 +276,35 @@ func (inc Incrementor) padKey(key []byte) ([]byte, error) {
 	return pk, nil
 }
 
+/*
+ * sectionIdxFromKeyIdx: get section byte index in buffer from section key index
+ * @keyIdx: section key index
+ *
+ * Return: index in buffer that section starts at
+ */
 func (inc Incrementor) sectionIdxFromKeyIdx(keyIdx int) int {
 	return keyIdx * SECTION_SIZE // byte index of key / section in buffer
 }
 
+/*
+ * keyIdxFromSectionIdx: get key index of section in buffer from section index
+ * @sectionIdx: index of start of section in buffer
+ *
+ * Return: key index for section in buffer
+ */
 func (inc Incrementor) keyIdxFromSectionIdx(sectionIdx int) int {
 	return sectionIdx / SECTION_SIZE // key number from byte index in buffer
 }
 
+/*
+ * binSearch: perform binary search for @key in buffer
+ * @key: key to search for in buffer, must be padded to SECTION_KEY_SIZE
+ * @l: low bound key index of partition to search in
+ * @h: high bound key index of partition to search in
+ *
+ * Return: last checked section key index and compare result of
+ *         last checked section with key
+ */
 func (inc Incrementor) binSearch(key []byte, l, h int) (int, int) {
 	if (h == l) || ((h - l) == 1) {
 		lSecIdx := inc.sectionIdxFromKeyIdx(l)
@@ -276,6 +325,9 @@ func (inc Incrementor) binSearch(key []byte, l, h int) (int, int) {
 	return mKeyIdx, cmp
 }
 
+/*
+ * printSections: print each section in buffer
+ */
 func (inc Incrementor) printSections() {
 	for i := 0; i < inc.KeyCount(); i++ {
 		secIdx := inc.sectionIdxFromKeyIdx(i)
@@ -283,10 +335,9 @@ func (inc Incrementor) printSections() {
 		sectionMnt := inc.buffer[(secIdx + SECTION_KEY_SIZE):(secIdx + SECTION_KEY_SIZE + SECTION_MNT_SIZE)]
 		sectionVal := inc.buffer[(secIdx + SECTION_KEY_SIZE + SECTION_MNT_SIZE):(secIdx + SECTION_SIZE)]
 
-		// IMPORTANT: check endianess
 		endian := binary.NativeEndian
 		mnt := time.UnixMilli(int64(endian.Uint64(sectionMnt)))
 		val := endian.Uint32(sectionVal)
-		fmt.Println(fmt.Sprintf("%x:%s:%d", sectionKey, mnt, val))
+		fmt.Println(fmt.Sprintf("%v:%s:%d", sectionKey, mnt, val))
 	}
 }
