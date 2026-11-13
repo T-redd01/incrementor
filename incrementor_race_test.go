@@ -115,3 +115,86 @@ func TestIncrementorPubDelRace(t *testing.T) {
 	// all keys deleted
 	assert.Equal(t, 0, inc.KeyCount())
 }
+
+func TestIncrementorPubAddGetDelSimultaneously(t *testing.T) {
+	numKeys := 100
+	genKeys := make([][]byte, numKeys)
+
+	inc := NewIncrementor(numKeys)
+
+	for i := 0; i < numKeys; i++ {
+		genKeys[i] = genMathRandBytes(SECTION_KEY_SIZE)
+	}
+
+	wg := sync.WaitGroup{}
+	blocker := make(chan struct{})
+
+	wg.Add(1)
+	go func () {
+		defer wg.Done()
+
+		copyGenKeys := make([][]byte, numKeys)
+		copy(copyGenKeys, genKeys)
+
+		for i := 0; i < numKeys; i++ {
+			rand.Shuffle(numKeys, func (i, j int) {
+				tmp := copyGenKeys[i]
+				copyGenKeys[i] = copyGenKeys[j]
+				copyGenKeys[j] = tmp
+		})
+
+		<-blocker
+
+		for i := 0; i < numKeys; i++ {
+			_ = inc.Add(copyGenKeys[i])
+		}
+	}
+	}()
+
+	wg.Add(1)
+	go func () {
+		defer wg.Done()
+
+		copyGenKeys := make([][]byte, numKeys)
+		copy(copyGenKeys, genKeys)
+
+		for i := 0; i < numKeys; i++ {
+			rand.Shuffle(numKeys, func (i, j int) {
+				tmp := copyGenKeys[i]
+				copyGenKeys[i] = copyGenKeys[j]
+				copyGenKeys[j] = tmp
+		})
+
+		<-blocker
+
+		for i := 0; i < numKeys; i++ {
+			_, _ = inc.Get(copyGenKeys[i])
+		}
+	}
+	}()
+
+	wg.Add(1)
+	go func () {
+		defer wg.Done()
+
+		copyGenKeys := make([][]byte, numKeys)
+		copy(copyGenKeys, genKeys)
+
+		for i := 0; i < numKeys; i++ {
+			rand.Shuffle(numKeys, func (i, j int) {
+				tmp := copyGenKeys[i]
+				copyGenKeys[i] = copyGenKeys[j]
+				copyGenKeys[j] = tmp
+		})
+
+		<-blocker
+
+		for i := 0; i < numKeys; i++ {
+			_ = inc.Del(copyGenKeys[i])
+		}
+	}
+	}()
+
+	close(blocker)
+	wg.Wait()
+}

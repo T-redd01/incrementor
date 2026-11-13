@@ -18,8 +18,23 @@ func genMathRandBytes(n int) []byte {
 }
 
 func TestSome(t *testing.T) {
-	for i := 0; i < 15; i++ {
-		n := rand.IntN(11)
-		t.Logf("got rand n: %v", n)
+	numKeys := 100
+	genKeys := make([][]byte, numKeys)
+
+	for i := 0; i < numKeys; i++ {
+		genKeys[i] = genMathRandBytes(SECTION_KEY_SIZE)
+		t.Logf("before shuffle: [%v]%x", i, genKeys[i])
+	}
+
+	for i := 0; i < numKeys; i++ {
+		rand.Shuffle(numKeys, func (i, j int) {
+			tmp := genKeys[i]
+			genKeys[i] = genKeys[j]
+			genKeys[j] = tmp
+		})
+	}
+
+	for i := 0; i < numKeys; i++ {
+		t.Logf("after shuffle: [%v]%x", i, genKeys[i])
 	}
 }

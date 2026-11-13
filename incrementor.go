@@ -83,13 +83,13 @@ func (inc *Incrementor) Has(key []byte) bool {
  * Return: incremented value for key in buffer
  */
 func (inc *Incrementor) Get(key []byte) (uint32, error) {
+	inc.bufferLock.RLock()
+	defer inc.bufferLock.RUnlock()
+
 	padKey, err := inc.padKey(key)
 	if err != nil {
 		return 0, err
 	}
-
-	inc.bufferLock.RLock()
-	defer inc.bufferLock.RUnlock()
 
 	keyIdx, cmp := inc.binSearch(padKey, 0, inc.KeyCount())
 	if cmp != 0 {
