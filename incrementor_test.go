@@ -7,19 +7,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIncrementorPrivSectionIdxFromKeyIdx(t *testing.T) {
-}
+func FuzzTestIncrementorPrivPadKey(f *testing.F) {
+	f.Fuzz(func (t *testing.T, b []byte) {
+		inc := NewIncrementor(1)
+		expectErr := false
+		if len(b) > SECTION_KEY_SIZE {
+			expectErr = true
+		}
 
-func TestIncrementorPrivKeyIdxFromSectionIdx(t *testing.T) {
-}
-
-func TestIncrementorPrivPadKey(t *testing.T) {
-}
-
-func TestIncrementorPubKeyCount(t *testing.T) {
-}
-
-func TestIncrementorPubKeyLimit(t *testing.T) {
+		pad, err := inc.padKey(b)
+		if expectErr == true {
+			assert.Error(t, err)
+			assert.Equal(t, 0, len(pad))
+		} else {
+			assert.NoError(t, err)
+			assert.Equal(t, SECTION_KEY_SIZE, len(pad))
+		}
+	})
 }
 
 func TestIncrementorPrivBinSearch(t *testing.T) {
